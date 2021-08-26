@@ -6,15 +6,16 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import com.example.helloword.service.WifiTimerService;
+import com.example.helloword.utils.NetWorkUtils;
+import com.example.helloword.utils.SharedPrefUtils;
 import com.example.helloword.utils.WifiAutoConnectManager;
+import com.example.helloword.utils.WifiBaseInfo;
 
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
@@ -63,12 +64,16 @@ public class WifiTestActivity extends Activity implements View.OnClickListener {
     List<ScanResult> mScanResultList = new ArrayList<ScanResult>();
     public static String ssid = "";
     WifiAutoConnectManager.WifiCipherType type = WifiAutoConnectManager.WifiCipherType.WIFICIPHER_NOPASS;
-    public static String password = "";//"hyc888888";
+    public static String password = "";
     FrameLayout progressbar;
     boolean isLinked = false;
 
     String gateway = "";
     String mac = "";
+    
+    SharedPrefUtils shared;
+    String currentSsidString = "";
+    String currentPassword = "";
     
     /**
      * 处理信号量改变或者扫描结果改变的广播
@@ -85,11 +90,33 @@ public class WifiTestActivity extends Activity implements View.OnClickListener {
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_wifi_test);
 		
-		 preferences = getSharedPreferences(WifiTimerService.WIFI_SETTING_KEY, MODE_ENABLE_WRITE_AHEAD_LOGGING);
-		 editor = preferences.edit();
-		 ssid = preferences.getString(WifiTimerService.WIFI_NAME_KEY,"hyc");
-		 password = preferences.getString(WifiTimerService.WIFI_PWD_KEY,"hyc888888");
+//		 preferences = getSharedPreferences(WifiTimerService.WIFI_SETTING_KEY, MODE_ENABLE_WRITE_AHEAD_LOGGING);
+//		 editor = preferences.edit();
+//		 ssid = preferences.getString(WifiTimerService.WIFI_NAME_KEY,"");
+//		 password = preferences.getString(WifiTimerService.WIFI_PWD_KEY,"");
 	     
+		
+        //初始化wifi工具
+        WifiManager wifiManager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+        mWifiAutoConnectManager = WifiAutoConnectManager.newInstance(wifiManager);
+
+        
+		//当前连接的wifi
+		currentSsidString = WifiAutoConnectManager.getSSID();
+		
+		
+		shared = new SharedPrefUtils(WifiTestActivity.this);
+		if(currentSsidString!=null){
+			WifiBaseInfo wifiBaseInfo =  shared.getData(currentSsidString, "");
+			if(wifiBaseInfo!=null){
+				ssid = wifiBaseInfo.getName();
+				password = wifiBaseInfo.getPwd();
+				
+				currentPassword = password;
+			}
+		}
+		
+		
 		
 		Intent intent = new Intent(WifiTestActivity.this, WifiTimerService.class);
 		  //使用Intent传值
@@ -98,11 +125,7 @@ public class WifiTestActivity extends Activity implements View.OnClickListener {
 	    
 	    
 		intiView();
-		
-        //初始化wifi工具
-        WifiManager wifiManager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
-        mWifiAutoConnectManager = WifiAutoConnectManager.newInstance(wifiManager);
-
+	
 //        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
 //            // 获取wifi连接需要定位权限,没有获取权限
 //            ActivityCompat.requestPermissions(this, new String[]{
@@ -130,10 +153,18 @@ public class WifiTestActivity extends Activity implements View.OnClickListener {
             mWorkAsyncTask.execute();
             break;
         case R.id.connect_wifi:
+
             if (ssid.equals(WifiAutoConnectManager.getSSID())) {
                 return;
             }
             String pwdString = et_pwd.getText().toString().trim();
+            Log.i("pwdString", "-----pwdString:"+pwdString);
+            Log.i("ssid", "--------ssid:"+ssid);
+            if(TextUtils.isEmpty(ssid)){
+            	Toast.makeText(WifiTestActivity.this, "请先选择一个wifi", Toast.LENGTH_SHORT).show();
+            	return;
+            }
+            
             if(TextUtils.isEmpty(pwdString)){
             	Toast.makeText(WifiTestActivity.this, "请先填写wifi密码", Toast.LENGTH_SHORT).show();
             	return;
@@ -173,10 +204,14 @@ public class WifiTestActivity extends Activity implements View.OnClickListener {
  
     
     private boolean saveWifiInfo(String wifi,String pwd){
-        editor.putString(WifiTimerService.WIFI_NAME_KEY,wifi);
-        editor.putString(WifiTimerService.WIFI_PWD_KEY,pwd);
-        return editor.commit();
+    	
+//        editor.putString(WifiTimerService.WIFI_NAME_KEY,wifi);
+//        editor.putString(WifiTimerService.WIFI_PWD_KEY,pwd);
+//        return editor.commit();
+    	return shared.saveData(wifi, pwd);
     }
+    
+ 
     
     private void initWifiSate() {
     	
@@ -499,9 +534,13 @@ public class WifiTestActivity extends Activity implements View.OnClickListener {
 			
             if (tempConfig != null) {
                 Log.d("wifidemo", ssid + "配置过！");
+                Log.d("wifidemo", ssid + "密码："+password);
                 boolean result = mWifiAutoConnectManager.wifiManager.enableNetwork(tempConfig.networkId, true);
+                
                 if (!isLinked && type != WifiAutoConnectManager.WifiCipherType.WIFICIPHER_NOPASS) {
-                    try {
+                    
+                	Log.d("wifidemo", "---------isLinked="+isLinked);
+                	try {
                         Thread.sleep(5000);//超过5s提示失败
                         if (!isLinked) {
                             Log.d("wifidemo", ssid + "连接失败！");
@@ -512,13 +551,28 @@ public class WifiTestActivity extends Activity implements View.OnClickListener {
                                     progressbar.setVisibility(View.GONE);
                                     
                                     Log.d("wifidemo",  "----------------"+ssid+"重新连接中.....");
-                                   //如果连接失败  删除原来的networkId 重新假如
+                                    Log.d("wifidemo", ssid + "配置过22222！");
+                                    Log.d("wifidemo", ssid + "密2222码："+password);
+                                    //如果连接失败  删除原来的networkId 重新假如
     	                            mWifiAutoConnectManager.wifiManager.removeNetwork(tempConfig.networkId);
     	                            WifiConfiguration wifiConfig = mWifiAutoConnectManager.createWifiInfo(ssid, password, type);
     	                            int netID = mWifiAutoConnectManager.wifiManager.addNetwork(wifiConfig);
                                     boolean enabled = mWifiAutoConnectManager.wifiManager.enableNetwork(netID, true);
                                     Log.d("wifidemo", "enableNetwork status enable=" + enabled);
 //                                   
+//                                    boolean isNetwork = NetWorkUtils.isNetWork();
+//                                    
+//                                    if(isNetwork==false){
+//                                    	Log.d("wifidemo",  "----------------"+ssid+"第二次重新连接中.....");
+//                                    	
+//                                    	mWifiAutoConnectManager.wifiManager.removeNetwork(tempConfig.networkId);
+//        	                            wifiConfig = mWifiAutoConnectManager.createWifiInfo(ssid, password, type);
+//        	                            netID = mWifiAutoConnectManager.wifiManager.addNetwork(wifiConfig);
+//                                        enabled = mWifiAutoConnectManager.wifiManager.enableNetwork(netID, true);
+//                                        Log.d("wifidemo", "enableNetwork status enable=" + enabled);
+//                                    }
+                                    	
+                                    
                                     
                                     
 //                                    Toast.makeText(getApplicationContext(), "连接失败!请在系统里删除wifi连接，重新连接。", Toast.LENGTH_SHORT).show();
@@ -547,49 +601,99 @@ public class WifiTestActivity extends Activity implements View.OnClickListener {
                     }
                 }
                 Log.d("wifidemo", "result=" + result);
+                if(result==false){
+                	Log.d("wifidemo", "result2222222222222222=");
+                	mWifiAutoConnectManager.wifiManager.removeNetwork(tempConfig.networkId);
+                    WifiConfiguration wifiConfig = mWifiAutoConnectManager.createWifiInfo(ssid, password, type);
+                    int netID = mWifiAutoConnectManager.wifiManager.addNetwork(wifiConfig);
+                    boolean enabled = mWifiAutoConnectManager.wifiManager.enableNetwork(netID, true);
+                    Log.d("wifidemo", "22222222222enabled="+enabled);
+                }
                 return result;
             } else {
                 Log.d("wifidemo", ssid + "没有配置过！");
+                Log.d("wifidemo", ssid + "密码："+password);
+                
                 if (type != WifiAutoConnectManager.WifiCipherType.WIFICIPHER_NOPASS) {
                     runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
-                            final EditText inputServer = new EditText(WifiTestActivity.this);
-                            new AlertDialog.Builder(WifiTestActivity.this)
-                                    .setTitle("请输入密码")
-                                    .setView(inputServer)
-                                    .setNegativeButton("取消", new DialogInterface.OnClickListener() {
-                                        @Override
-                                        public void onClick(DialogInterface dialog, int which) {
-                                            dialog.dismiss();
-                                        }
-                                    })
-                                    .setPositiveButton("连接", new DialogInterface.OnClickListener() {
 
-                                        public void onClick(DialogInterface dialog, int which) {
-                                            password = inputServer.getText().toString();
-                                            
-                                            saveWifiInfo(ssid, password);
-                                            new Thread(new Runnable() {
-                                                @Override
-                                                public void run() {
-                                                    WifiConfiguration wifiConfig = mWifiAutoConnectManager.createWifiInfo(ssid, password,
-                                                            type);
-                                                    if (wifiConfig == null) {
-                                                        Log.d("wifidemo", "wifiConfig is null!");
-                                                        return;
-                                                    }
-                                                    Log.d("wifidemo", wifiConfig.SSID);
+                            
+                            saveWifiInfo(ssid, password);
+                            new Thread(new Runnable() {
+                                @Override
+                                public void run() {
+                                	
+                                	Log.d("wifidemo", "runrunrunrunrunrunrun");
+                                    WifiConfiguration wifiConfig = mWifiAutoConnectManager.createWifiInfo(ssid, password,
+                                            type);
+                                    if (wifiConfig == null) {
+                                        Log.d("wifidemo", "wifiConfig is null!");
+                                        return;
+                                    }
+                                    
+                                    Log.d("wifidemo", "----没有配置过---ssid:"+wifiConfig.SSID);
 
-                                                    int netID = mWifiAutoConnectManager.wifiManager.addNetwork(wifiConfig);
-                                                    boolean enabled = mWifiAutoConnectManager.wifiManager.enableNetwork(netID, true);
-                                                    Log.d("wifidemo", "enableNetwork status enable=" + enabled);
-//                                                    Log.d("wifidemo", "enableNetwork connected=" + mWifiAutoConnectManager.wifiManager.reconnect());
-//                                                    mWifiAutoConnectManager.wifiManager.reconnect();
-                                                }
-                                            }).start();
-                                        }
-                                    }).show();
+                                    int netID = mWifiAutoConnectManager.wifiManager.addNetwork(wifiConfig);
+                                    boolean enabled = mWifiAutoConnectManager.wifiManager.enableNetwork(netID, true);
+                                    Log.d("wifidemo", "enableNetwork status enable=" + enabled);
+//                                    Log.d("wifidemo", "enableNetwork connected=" + mWifiAutoConnectManager.wifiManager.reconnect());
+//                                    mWifiAutoConnectManager.wifiManager.reconnect();
+                                    
+                                    
+                                    
+                                    
+                                    if(enabled==false){
+                                    
+                                    	Log.d("wifidemo", "333333333=");
+                                    	mWifiAutoConnectManager.wifiManager.removeNetwork(netID);
+                                        wifiConfig = mWifiAutoConnectManager.createWifiInfo(ssid, password, type);
+                                        netID = mWifiAutoConnectManager.wifiManager.addNetwork(wifiConfig);
+                                        enabled = mWifiAutoConnectManager.wifiManager.enableNetwork(netID, true);
+                                        Log.d("wifidemo", "33333333,enabled="+enabled);
+                                    }
+                                    
+                                }
+                            }).start();
+                            
+                            
+//                          final EditText inputServer = new EditText(WifiTestActivity.this);
+//                            new AlertDialog.Builder(WifiTestActivity.this)
+//                                    .setTitle("请输入密码")
+//                                    .setView(inputServer)
+//                                    .setNegativeButton("取消", new DialogInterface.OnClickListener() {
+//                                        @Override
+//                                        public void onClick(DialogInterface dialog, int which) {
+//                                            dialog.dismiss();
+//                                        }
+//                                    })
+//                                    .setPositiveButton("连接", new DialogInterface.OnClickListener() {
+//
+//                                        public void onClick(DialogInterface dialog, int which) {
+//                                            password = inputServer.getText().toString();
+//                                            
+//                                            saveWifiInfo(ssid, password);
+//                                            new Thread(new Runnable() {
+//                                                @Override
+//                                                public void run() {
+//                                                    WifiConfiguration wifiConfig = mWifiAutoConnectManager.createWifiInfo(ssid, password,
+//                                                            type);
+//                                                    if (wifiConfig == null) {
+//                                                        Log.d("wifidemo", "wifiConfig is null!");
+//                                                        return;
+//                                                    }
+//                                                    Log.d("wifidemo", wifiConfig.SSID);
+//
+//                                                    int netID = mWifiAutoConnectManager.wifiManager.addNetwork(wifiConfig);
+//                                                    boolean enabled = mWifiAutoConnectManager.wifiManager.enableNetwork(netID, true);
+//                                                    Log.d("wifidemo", "enableNetwork status enable=" + enabled);
+////                                                    Log.d("wifidemo", "enableNetwork connected=" + mWifiAutoConnectManager.wifiManager.reconnect());
+////                                                    mWifiAutoConnectManager.wifiManager.reconnect();
+//                                                }
+//                                            }).start();
+//                                        }
+//                                    }).show();
                         }
                     });
                 } else {

@@ -14,10 +14,19 @@ import android.util.Log;
 
 public class NetWorkUtils {
 	
-	private static final String PINGURL = "rp.belle.cn";
+	private static final String IPADDRESS ="172.20.30.197";
+	
+	private static final String PINGURL = "172.20.30.197";
 	
 	private static final String URL = "http://rp.belle.cn:9090/blsf-mesV1-web/bas_workshop_group/listAll.json";
 	
+	
+	 public static boolean ping() throws Exception {
+	        int  timeOut =  3000 ;  //超时应该在3钞以上        
+	        boolean status = InetAddress.getByName(IPADDRESS).isReachable(timeOut);     // 当返回值是true时，说明host是可用的，false则不可。
+	        return status;
+	 }
+	 
 	public static boolean isNetWork(String pingUrl){
 		try {
 		    Process process = Runtime.getRuntime().exec("/system/bin/ping -c 1 -w 100 www.baid.com");

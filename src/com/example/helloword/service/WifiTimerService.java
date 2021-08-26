@@ -1,16 +1,20 @@
 package com.example.helloword.service;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 
-import com.example.helloword.R;
-import com.example.helloword.WifiTestActivity;
 import com.example.helloword.utils.NetWorkUtils;
+import com.example.helloword.utils.SharedPrefUtils;
 import com.example.helloword.utils.WifiAutoConnectManager;
+import com.example.helloword.utils.WifiBaseInfo;
 
 import android.annotation.SuppressLint;
 import android.app.Service;
@@ -19,14 +23,12 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
-import android.graphics.Color;
 import android.net.NetworkInfo;
 import android.net.wifi.ScanResult;
 import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiManager;
 import android.os.AsyncTask;
 import android.os.IBinder;
-import android.text.TextUtils;
 import android.util.Log;
 
 
@@ -42,7 +44,7 @@ public class WifiTimerService extends Service{
 	private SharedPreferences.Editor editor;
 	
 	private static String TAG = WifiTimerService.class.getName();
-    private static final long LOOP_TIME = 10; //循环时间
+    private static final long LOOP_TIME = 15; //循环时间
     private static ScheduledExecutorService mExecutorService;
 
     List<ScanResult> mScanResultList = new ArrayList<ScanResult>();
@@ -56,8 +58,8 @@ public class WifiTimerService extends Service{
     ConnectAsyncTask mConnectAsyncTask = null;
     
     private List<ScanResult> mWifiList = new ArrayList<ScanResult>();
-    private String currentWifi="hyc";
-    private String password = "";//"hyc888888";
+    private String currentWifi="";
+    private String password = "";
     boolean isLinked = false;
     String ssid;
     
@@ -65,8 +67,13 @@ public class WifiTimerService extends Service{
     private IntentFilter mWifiConnectIntentFilter;
     private int count = 0;
 
-    WifiAutoConnectManager.WifiCipherType type = WifiAutoConnectManager.WifiCipherType.WIFICIPHER_NOPASS;
+    private WifiAutoConnectManager.WifiCipherType type = WifiAutoConnectManager.WifiCipherType.WIFICIPHER_NOPASS;
     
+    private SharedPrefUtils shared;
+    
+    private Map wifimap = new HashMap(); 
+    
+    private boolean isNotRunning = true;
 
 	@Override
 	public IBinder onBind(Intent intent) {
@@ -81,18 +88,30 @@ public class WifiTimerService extends Service{
         
         Log.d(TAG, "onCreate");
         
-        preferences = getSharedPreferences(WIFI_SETTING_KEY, MODE_ENABLE_WRITE_AHEAD_LOGGING);
-	    editor = preferences.edit();
-	    
-	    getWifiInfo();
-		 
         
-        //初始化wifi工具
+        
+//        preferences = getSharedPreferences(WIFI_SETTING_KEY, MODE_ENABLE_WRITE_AHEAD_LOGGING);
+//	    editor = preferences.edit();
+      //初始化wifi工具
         WifiManager wifiManager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
         mWifiAutoConnectManager = WifiAutoConnectManager.newInstance(wifiManager);
         
         mWifiAutoConnectManager.openWifi();
         
+        shared = new SharedPrefUtils(WifiTimerService.this);
+	    
+        currentWifi = WifiAutoConnectManager.getSSID();
+        if(currentWifi!=null){
+        	WifiBaseInfo wifiBaseInfo =  shared.getData(currentWifi, "");
+    		if(wifiBaseInfo!=null){
+    			ssid = wifiBaseInfo.getName();
+    			password = wifiBaseInfo.getPwd();
+    			
+    			currentWifi = ssid;
+    		}
+        }
+
+  
         initWifiSate();
        
         
@@ -140,21 +159,86 @@ public class WifiTimerService extends Service{
 	
 
     
-    private void getWifiInfo(){
-    	ssid = preferences.getString(WifiTimerService.WIFI_NAME_KEY,"hyc");
-		password = preferences.getString(WifiTimerService.WIFI_PWD_KEY,"hyc888888");
-    }
+    private boolean getWifiInfo(){
+
     
-    private ScanResult findWifi() {
-    	
-    	Log.d(TAG, "====== mScanResultList="+mScanResultList);
-    	for (ScanResult sr : mScanResultList) {
-    		Log.d(TAG, "====== currentWifi.equals(sr.SSID)="+currentWifi.equals(sr.SSID));
-			if(currentWifi.equals(sr.SSID)){
-				return sr;
+		List<WifiBaseInfo> list =  shared.getListData();
+		Log.i(TAG, "-------getWifiInfo():length="+list.size());
+		if(list.size()==0){
+			return false;
+		}
+		
+		for (WifiBaseInfo wifiBaseInfo : list) {
+	
+			Log.i(TAG, wifiBaseInfo.toString());
+			Log.i(TAG, "-------wifi Name ="+wifiBaseInfo.getName());
+			if(isExistWifi(wifiBaseInfo.getName())){
+				
+				Log.i(TAG, "-------wifiBaseInfo.getName()"+wifiBaseInfo.getName());
+				if(!wifimap.containsKey(wifiBaseInfo.getName())){
+					wifimap.put(wifiBaseInfo.getName(), true);
+				}
+				
 			}
 		}
-    	return null;
+		
+		checkWifiState();
+		
+		return true;
+    }
+    
+    private void checkWifiState(){
+    	 int closeCount = 0;
+    	 Set<String> keys = wifimap.keySet(); 
+         for (String key:keys) {
+        	 boolean isCheck = (boolean)wifimap.get(key);
+        	 if(isCheck==false){
+        		 closeCount = closeCount+1;
+        	 }
+         }
+         
+         if(wifimap.size() > 0 && closeCount==wifimap.size()){
+        	 for (String key:keys) {
+        		 wifimap.put(key, true);
+             }
+         }
+    }
+    
+    private String findWifi() {
+
+    	Iterator iterator = wifimap.keySet().iterator();                
+        while (iterator.hasNext()) {    
+        	Object key = iterator.next(); 
+        	Log.d(TAG, "====== findWifi key="+key + ",value="+wifimap.get(key));
+        	if((boolean) wifimap.get(key)) return key.toString();         
+        }  
+        return null;
+    }
+    
+    private boolean isExistWifi(String ssid){
+    	Log.d(TAG, "====== mScanResultList.size ="+mScanResultList.size());
+    	if(mScanResultList==null || mScanResultList.size()==0){
+    		mScanResultList = WifiAutoConnectManager.getScanResults();
+    	}
+    	
+    	Log.d(TAG, "====== mScanResultList.size ="+mScanResultList.size());
+    	for (ScanResult sr : mScanResultList) {
+    		Log.d(TAG, "====== current ssid:"+ssid+",sr.SSID="+sr.SSID);
+    		Log.d(TAG, "====== currentWifi.equals(sr.SSID)="+ssid.equals(sr.SSID));
+			if(ssid.equals(sr.SSID)){
+				return true;
+			}
+		}
+    	return false;
+    }
+    
+    private void updateWifiState(String ssid,boolean state){
+    	   Set<String> keys = wifimap.keySet(); 
+           for (String key:keys) {
+        	   if(key.equals(ssid)){
+        		   wifimap.put(ssid, state);
+        	   }
+           }
     }
     
     private void checkWifi(){
@@ -163,30 +247,36 @@ public class WifiTimerService extends Service{
 			   mWifiAutoConnectManager.openWifi();
 			   
 			   boolean isNetwork = NetWorkUtils.isNetWork();
+//			   boolean isNetwork = NetWorkUtils.ping();
 			   Log.d(TAG, "====== isNetwork="+isNetwork);
 			   if(isNetwork==false){
 
-				   getWifiInfo();
+				   Log.d(TAG, "................无网络无网络无网络................");
 				   
-				   //重连wifi
-				   Log.d(TAG, "=== checkWifi:无网络....");
-				   
-			       Log.d(TAG, "==========currentWifi="+currentWifi);
-			       Log.d(TAG, "==========checkWifi=========password="+password);
-			        
-			     
-	
-				   ScanResult srResult = findWifi();
-				   if(srResult==null) {
-					   Log.d(TAG, "=== checkWifi,ScanResult=null ===");
+				   boolean isSuc = getWifiInfo();
+				   if(isSuc==false){
+					   Log.d(TAG, "=== getWifiInfo()=false ===");
 					   return;
 				   }
-				   
-				   ssid = srResult.SSID;
-				     
-				   Log.d(TAG, "====== checkWifi:ssid="+ssid);
+	
+	
+			       ssid = findWifi();
+			       Log.d(TAG, "=== checkWifi,SSID="+ssid);
+				   if(ssid==null) {
+					   Log.d(TAG, "=== checkWifi,SSID=null ===");
+					   return;
+				   }
+
+				   WifiBaseInfo wifiBaseInfo = shared.getData(ssid, "");
+				   if(wifiBaseInfo==null){
+					   Log.d(TAG, "=== checkWifi,wifiBaseInfo=null ===");
+					   return;
+				   }
+				   password = wifiBaseInfo.getPwd();
+				   Log.d(TAG, "=== 当前连接的Wifi:ssid="+ssid);
+				   Log.d(TAG, "====== 当前连接的WiFi的password="+password);
 				   type = WifiAutoConnectManager.getCipherType(ssid);
-				   Log.d(TAG, "=== findWifi:ssid="+ssid);
+				   
 				   if (mConnectAsyncTask != null) {
 		                mConnectAsyncTask.cancel(true);
 		                mConnectAsyncTask = null;
@@ -194,12 +284,15 @@ public class WifiTimerService extends Service{
 		            mConnectAsyncTask = new ConnectAsyncTask(ssid, password, type);
 		            mConnectAsyncTask.execute();
 		            
+		            
 			   }
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
 		   
 	  }
+    
+
     
 	
    private void initWifiSate() {
@@ -285,19 +378,20 @@ public class WifiTimerService extends Service{
        } else if (state == NetworkInfo.DetailedState.CONNECTED) {
   
            isLinked = true;
-          
+           Log.i(TAG, "-----------wifi:"+ssid+",pwd:"+password+","+ssid+"已经成功连上网络....");
        } else if (state == NetworkInfo.DetailedState.CONNECTING) {
            isLinked = false;
+           Log.i(TAG, "-----------wifi:"+ssid+",pwd:"+password+","+ssid+"连上失败....");
            
        } else if (state == NetworkInfo.DetailedState.DISCONNECTED) {
            isLinked = false;
-           
+           Log.i(TAG, "-----------wifi:"+ssid+",pwd:"+password+","+ssid+"连上失败....");
        } else if (state == NetworkInfo.DetailedState.DISCONNECTING) {
            isLinked = false;
-           
+           Log.i(TAG, "-----------wifi:"+ssid+",pwd:"+password+","+ssid+"连上失败....");
        } else if (state == NetworkInfo.DetailedState.FAILED) {
            isLinked = false;
-
+           Log.i(TAG, "-----------wifi:"+ssid+",pwd:"+password+","+ssid+"连上失败....");
        } else if (state == NetworkInfo.DetailedState.IDLE) {
 
        } else if (state == NetworkInfo.DetailedState.OBTAINING_IPADDR) {
@@ -307,6 +401,9 @@ public class WifiTimerService extends Service{
        } else if (state == NetworkInfo.DetailedState.SUSPENDED) {
 
        }
+	  
+	  updateWifiState(ssid,isLinked);
+
     }
        
     
@@ -336,6 +433,7 @@ public class WifiTimerService extends Service{
 	        @Override
 	        protected Boolean doInBackground(Void... voids) {
 	        	Log.d("wifidemo", "-------doInBackground-----");
+	        	Log.d("wifidemo", "-------doInBackground-----ssid="+ssid);
 	        	// 打开wifi
 	            mWifiAutoConnectManager.openWifi();
 	            // 开启wifi功能需要一段时间(我在手机上测试一般需要1-3秒左右)，所以要等到wifi
@@ -381,7 +479,12 @@ public class WifiTimerService extends Service{
                                 boolean enabled = mWifiAutoConnectManager.wifiManager.enableNetwork(netID, true);
                                 Log.d("wifidemo", "enableNetwork status enable=" + enabled);
 //                               
-                                
+                                if(enabled){
+                                	boolean isNetwork = NetWorkUtils.isNetWork();
+                                    updateWifiState(ssid, isNetwork);
+                                }else{
+                                	updateWifiState(ssid, enabled);
+                                }
 	                        }
 	                    } catch (Exception e) {
 	                        e.printStackTrace();
@@ -389,6 +492,22 @@ public class WifiTimerService extends Service{
 	                }
 	                
 	                Log.d("wifidemo", "result=" + result);
+	                if(result==false){
+	                	Log.d("wifidemo", "result2222222222222222=");
+	                	mWifiAutoConnectManager.wifiManager.removeNetwork(tempConfig.networkId);
+	                    WifiConfiguration wifiConfig = mWifiAutoConnectManager.createWifiInfo(ssid, password, type);
+	                    int netID = mWifiAutoConnectManager.wifiManager.addNetwork(wifiConfig);
+	                    boolean enabled = mWifiAutoConnectManager.wifiManager.enableNetwork(netID, true);
+	                    Log.d("wifidemo", "22222222222enabled="+enabled);
+	                }
+	                
+	                if(result){
+                    	boolean isNetwork = NetWorkUtils.isNetWork();
+                        updateWifiState(ssid, isNetwork);
+                    }else{
+                    	updateWifiState(ssid, result);
+                    }
+	                
 	                return result;
 	                
 	            } else {
@@ -412,11 +531,34 @@ public class WifiTimerService extends Service{
                                  Log.d("wifidemo", "enableNetwork status enable=" + enabled);
 //                                
                                  
+                                 if(enabled==false){
+                                     
+                                 	Log.d("wifidemo", "333333333=");
+                                 	mWifiAutoConnectManager.wifiManager.removeNetwork(netID);
+                                     wifiConfig = mWifiAutoConnectManager.createWifiInfo(ssid, password, type);
+                                     netID = mWifiAutoConnectManager.wifiManager.addNetwork(wifiConfig);
+                                     enabled = mWifiAutoConnectManager.wifiManager.enableNetwork(netID, true);
+                                     Log.d("wifidemo", "33333333,enabled="+enabled);
+                                 
+                                 }
+                                 
+                                 if(enabled){
+                                 	boolean isNetwork = NetWorkUtils.isNetWork();
+                                     updateWifiState(ssid, isNetwork);
+                                 }else{
+                                 	updateWifiState(ssid, enabled);
+                                 }
+                                 
+                                
+                                 
                              }
                          }).start();
                          
 	                } else {
-	                    WifiConfiguration wifiConfig = mWifiAutoConnectManager.createWifiInfo(ssid, password, type);
+	                	
+	                	Log.d("wifidemo", ssid + "没有配置过！WifiAutoConnectManager.WifiCipherType.WIFICIPHER_NOPASS");
+	                    
+	                	WifiConfiguration wifiConfig = mWifiAutoConnectManager.createWifiInfo(ssid, password, type);
 	                    if (wifiConfig == null) {
 	                        Log.d("wifidemo", "wifiConfig is null!");
 	                        return false;
@@ -426,7 +568,13 @@ public class WifiTimerService extends Service{
 	                    boolean enabled = mWifiAutoConnectManager.wifiManager.enableNetwork(netID, true);
 	                    Log.d("wifidemo", "enableNetwork status enable=" + enabled);
 //	                  
-	                    return enabled;
+	                    if(enabled){
+                         	boolean isNetwork = NetWorkUtils.isNetWork();
+                             updateWifiState(ssid, isNetwork);
+                         }else{
+                         	updateWifiState(ssid, enabled);
+                         }
+                         
 	                    
 	                }
 	                
@@ -443,5 +591,45 @@ public class WifiTimerService extends Service{
 	    }
 	   
 
+	private void openWifi(final String ssid,final String password,final WifiAutoConnectManager.WifiCipherType type){
+		
+		
+		new Thread(new Runnable() {
+            @Override
+            public void run() {
+                
+            	
+        		Log.d("wifidemo", "-------doInBackground-----");
+            	Log.d("wifidemo", "-------doInBackground-----ssid="+ssid);
+            	// 打开wifi
+                mWifiAutoConnectManager.openWifi();
+                // 开启wifi功能需要一段时间(我在手机上测试一般需要1-3秒左右)，所以要等到wifi
+                // 状态变成WIFI_STATE_ENABLED的时候才能执行下面的语句
+                while (mWifiAutoConnectManager.wifiManager.getWifiState() == WifiManager.WIFI_STATE_ENABLING) {
+                    try {
+                        // 为了避免程序一直while循环，让它睡个100毫秒检测……
+                        Thread.sleep(100);
+
+                    } catch (InterruptedException ie) {
+                        Log.e("wifidemo", ie.toString());
+                    }
+                }
+
+                WifiConfiguration tempConfig = mWifiAutoConnectManager.isExsits(ssid);
+                //禁掉所有wifi
+                for (WifiConfiguration c : mWifiAutoConnectManager.wifiManager.getConfiguredNetworks()) {
+                    mWifiAutoConnectManager.wifiManager.disableNetwork(c.networkId);
+                }
+        		
+                mWifiAutoConnectManager.wifiManager.removeNetwork(tempConfig.networkId);
+                WifiConfiguration wifiConfig = mWifiAutoConnectManager.createWifiInfo(ssid, password, type);
+                int netID = mWifiAutoConnectManager.wifiManager.addNetwork(wifiConfig);
+                boolean enabled = mWifiAutoConnectManager.wifiManager.enableNetwork(netID, true);
+                //Log.d("wifidemo", "enableNetwork status enable=" + enabled);
+            }
+        }).start();
+		
+	
+	}
 
 }

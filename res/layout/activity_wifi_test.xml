@@ -6,6 +6,7 @@
     android:paddingLeft="@dimen/activity_horizontal_margin"
     android:paddingRight="@dimen/activity_horizontal_margin"
     android:paddingTop="@dimen/activity_vertical_margin"
+    
     tools:context="com.example.helloword.WifiTestActivity" >
 
      <LinearLayout
@@ -18,10 +19,11 @@
 
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="200dp"
+            android:layout_height="220dp"
             android:layout_marginBottom="10dp"
             android:layout_marginTop="10dp"
-            android:orientation="vertical">
+            android:orientation="vertical"
+            >
 
             <TextView
                 android:id="@+id/wifi_state"
@@ -29,6 +31,7 @@
                 android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:hint="wifi state"
+                android:textSize="20dp"
                 android:textColor="@android:color/black" />
 
             <TextView
@@ -37,6 +40,7 @@
                 android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:hint="wifi name"
+                android:textSize="20dp"
                 android:textColor="@android:color/black" />
 
             <TextView
@@ -45,6 +49,7 @@
                 android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:hint="mac"
+                android:textSize="20dp"
                 android:textColor="@android:color/black" />
 
             <TextView
@@ -53,6 +58,7 @@
                 android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:hint="ip address"
+                android:textSize="20dp"
                 android:textColor="@android:color/black" />
             <TextView
                 android:id="@+id/ip_gateway"
@@ -60,6 +66,7 @@
                 android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:hint="gateway"
+                android:textSize="20dp"
                 android:textColor="@android:color/black" />
             
             <EditText 
@@ -68,6 +75,7 @@
                 android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:hint="wifi密码"
+                android:textSize="20dp"
             
                 />
         </LinearLayout>
@@ -85,14 +93,16 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
-                android:text="search wifi" />
+                android:text="搜索WIFI" 
+                android:textSize="20dp"/>
 
             <Button
                 android:id="@+id/connect_wifi"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
-                android:text="connect" />
+                android:text="连接" 
+                android:textSize="20dp"/>
 
 
         </LinearLayout>
